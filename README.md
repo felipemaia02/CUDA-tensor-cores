@@ -152,5 +152,5 @@ This project is licensed under the [MIT License](LICENSE).
 ## Contact
 
 - **Author**: Felipe Maia
-- **Email**: your-email@example.com
-- **LinkedIn**: [Your LinkedIn](https://linkedin.com/in/your-profile)
+- **Email**: felipeoliveiramaia3@gmail.com
+- **LinkedIn**: [Your LinkedIn](https://www.linkedin.com/in/felipeoliveira-maia/)
