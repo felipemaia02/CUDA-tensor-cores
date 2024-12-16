@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
-#include <mma.h> // Necessário para Tensor Cores
+#include <mma.h> // Required for Tensor Cores
 
 using namespace nvcuda;
 
-/* Constantes */
+/* Constants */
 #define CS2 (1.0 / 3.0)
 #define t0 (4.0 / 9.0)
 #define t1 (1.0 / 9.0)
@@ -13,7 +13,7 @@ using namespace nvcuda;
 
 #define DEBUG
 
-/* Estruturas */
+/* Structures */
 typedef struct {
     int t_max;
     double density;
@@ -32,7 +32,7 @@ typedef struct {
     double *temp;
 } s_lattice;
 
-/* Alocação e liberação de memória */
+/* Memory allocation and deallocation */
 void alloc_lattice(s_lattice *l) {
     l->obst = (unsigned short int *)calloc(l->lx * l->ly, sizeof(unsigned short int));
     l->node = (double *)calloc(l->lx * l->ly * l->n, sizeof(double));
@@ -70,7 +70,7 @@ void read_obstacles(s_lattice *l, char *file) {
         if (i <= l->lx && j <= l->ly && i >= 1 && j >= 1) {
             l->obst[(i - 1) * l->ly + (j - 1)] = 1;
         } else {
-            fprintf(stderr, "Obstacle point[%d,%d] invalid!\n\n", i, j);
+            fprintf(stderr, "Invalid obstacle point [%d,%d]!\n\n", i, j);
             exit(EXIT_FAILURE);
         }
         c++;
@@ -79,7 +79,7 @@ void read_obstacles(s_lattice *l, char *file) {
     fclose(archive);
 }
 
-/* Inicialização de densidades */
+/* Density initialization */
 void init_density(s_lattice *l, double density) {
     unsigned int i, xy;
     double t_0 = density * t0;
@@ -99,11 +99,11 @@ void init_density(s_lattice *l, double density) {
     }
 }
 
-/* Kernel usando Tensor Cores */
+/* Kernel using Tensor Cores */
 __global__ void relaxation_tensor_core(unsigned short int *obst, half *node, half *temp, float omega, unsigned int max) {
-    __shared__ half shared_temp[16 * 16]; // Shared memory para `temp`
-    __shared__ half shared_n_equ[16 * 16]; // Shared memory para `n_equ`
-    __shared__ float shared_result[16 * 16]; // Shared memory para resultado acumulador
+    __shared__ half shared_temp[16 * 16]; // Shared memory for `temp`
+    __shared__ half shared_n_equ[16 * 16]; // Shared memory for `n_equ`
+    __shared__ float shared_result[16 * 16]; // Shared memory for accumulated result
 
     wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> temp_frag;
     wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> n_equ_frag;
@@ -115,26 +115,26 @@ __global__ void relaxation_tensor_core(unsigned short int *obst, half *node, hal
         if (!obst[idx]) {
             unsigned int xy = idx * 9;
 
-            // Carregar dados da memória global para a shared memory
+            // Load data from global memory to shared memory
             for (int i = threadIdx.x; i < 16 * 16; i += blockDim.x) {
                 shared_temp[i] = temp[xy + i];
-                shared_n_equ[i] = temp[xy + i]; // Exemplo: dados para n_equ
+                shared_n_equ[i] = temp[xy + i]; // Example: data for n_equ
             }
             __syncthreads();
 
-            // Carregar shared memory nos fragmentos
+            // Load shared memory into fragments
             wmma::load_matrix_sync(temp_frag, shared_temp, 16);
             wmma::load_matrix_sync(n_equ_frag, shared_n_equ, 16);
 
-            // Realiza o cálculo com Tensor Cores
+            // Perform computation with Tensor Cores
             wmma::fill_fragment(c_frag, 0.0f);
             wmma::mma_sync(c_frag, temp_frag, n_equ_frag, c_frag);
 
-            // Armazena o resultado na shared memory
+            // Store the result into shared memory
             wmma::store_matrix_sync(shared_result, c_frag, 16, wmma::mem_row_major);
             __syncthreads();
 
-            // Copiar resultados da shared memory para memória global
+            // Copy results from shared memory back to global memory
             for (int i = threadIdx.x; i < 16 * 16; i += blockDim.x) {
                 node[xy + i] = __float2half(shared_result[i]);
             }
@@ -183,8 +183,8 @@ int main(int argc, char **argv) {
     dim3 blocksPerGrid((lattice.lx * lattice.ly + threadsPerBlock.x - 1) / threadsPerBlock.x);
 
     #ifdef DEBUG
-	printf("Initial sum: %.10lf\n", check_sum(&lattice));
-	#endif
+    printf("Initial sum: %.10lf\n", check_sum(&lattice));
+    #endif
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -204,10 +204,10 @@ int main(int argc, char **argv) {
     cudaFree(d_node_half);
     cudaFree(d_temp_half);
 
-	#ifdef DEBUG
-	printf("End sum: %.10lf\n", check_sum(&lattice));
-	#endif
-	dealloc_lattice(&lattice);
+    #ifdef DEBUG
+    printf("End sum: %.10lf\n", check_sum(&lattice));
+    #endif
+    dealloc_lattice(&lattice);
 
     printf("lb_2d_cuda_tensor,%.4f,%d,%d,%d,%d,%f,%f,%f,%f\n",
            milliseconds / 1000,
